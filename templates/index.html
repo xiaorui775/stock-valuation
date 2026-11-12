@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票估值工具 · StockVal</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">📊 StockVal <span>股票估值工具</span></div>
+  <form id="search-form" class="search">
+    <input id="ticker-input" type="text" placeholder="输入股票代码，如 AAPL / MSFT / 0700.HK / 600519.SS"
+           autocomplete="off" spellcheck="false">
+    <button type="submit">查询</button>
+  </form>
+</header>
+
+{% if demo %}
+<div class="demo-banner">演示模式：当前展示的是内置样本数据，不连接真实行情。</div>
+{% endif %}
+
+<main>
+  <div id="status" class="status">输入股票代码开始查询。</div>
+
+  <section id="quote-section" class="hidden">
+    <div class="quote-head">
+      <div>
+        <h1><span id="q-name">—</span> <span id="q-ticker" class="ticker-tag"></span></h1>
+        <div class="price-row">
+          <span id="q-price" class="price">—</span>
+          <span id="q-change" class="change"></span>
+          <span id="q-currency" class="currency"></span>
+        </div>
+      </div>
+      <div id="q-band" class="band hidden"></div>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">概览</button>
+      <button class="tab" data-tab="financials">财务报表</button>
+      <button class="tab" data-tab="valuation">估值</button>
+    </nav>
+
+    <!-- 概览 -->
+    <div id="tab-overview" class="tab-page">
+      <div class="card">
+        <h2>近一年股价走势</h2>
+        <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>关键指标</h2>
+        <div id="stats-grid" class="stats-grid"></div>
+      </div>
+    </div>
+
+    <!-- 财务 -->
+    <div id="tab-financials" class="tab-page hidden">
+      <div class="card">
+        <h2>年度财务数据（最近 4 个财年，单位：亿元）</h2>
+        <table id="fin-table" class="data-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+        <p class="note">个别公司报表科目缺失时以「—」表示，不做估算填充。</p>
+      </div>
+    </div>
+
+    <!-- 估值 -->
+    <div id="tab-valuation" class="tab-page hidden">
+      <div class="card">
+        <h2>DCF 现金流折现（两阶段）</h2>
+        <div class="dcf-meta" id="dcf-meta"></div>
+        <form id="dcf-form" class="dcf-form">
+          <label>阶段一增速 %（未来 5 年）
+            <input type="number" step="0.1" id="in-growth" value="10">
+          </label>
+          <label>永续增速 %
+            <input type="number" step="0.1" id="in-terminal" value="2.5">
+          </label>
+          <label>折现率 %（CAPM 预填，可改）
+            <input type="number" step="0.1" id="in-discount" placeholder="自动">
+          </label>
+          <label>股利增速 %（股利折现用）
+            <input type="number" step="0.1" id="in-ddm-growth" value="3">
+          </label>
+          <button type="submit">重新估值</button>
+        </form>
+        <div id="dcf-result"></div>
+        <h3>敏感性分析（每股价值）</h3>
+        <p class="note">行：折现率（基准 ±1%、±2%）；列：永续增速。</p>
+        <table id="sens-table" class="data-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>估值倍数与经典公式</h2>
+        <div id="multiples"></div>
+      </div>
+
+      <div class="card" id="ddm-card">
+        <h2>股利折现（Gordon 增长模型）</h2>
+        <div id="ddm-result"></div>
+      </div>
+
+      <div class="card">
+        <h2>综合结论（模型输出）</h2>
+        <div id="summary-result"></div>
+        <p class="disclaimer">⚠️ 本工具仅供学习研究，不构成投资建议，估值结果取决于假设输入。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">数据来源：Yahoo Finance（yfinance）。估值模型：两阶段 DCF、估值倍数、Graham 公式、Gordon 股利增长模型。本工具仅供学习研究，不构成投资建议。</footer>
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
