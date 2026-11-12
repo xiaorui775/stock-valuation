@@ -1,0 +1,49 @@
+[project]
+name = "stockval-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "httpx>=0.27",
+    "yfinance>=0.2.40",
+    "akshare>=1.14",
+    "pandas>=2.2",
+    "apscheduler>=3.10",
+    "structlog>=24.4",
+    "argon2-cffi>=23.1",
+    "itsdangerous>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# 本项目显式使用 Optional[...] 而非 X | None，以兼容运行时反射场景
+ignore = ["UP045", "UP007"]
+
+[tool.ruff.lint.per-file-ignores]
+# 上游数据源的兜底捕获是有意为之：任何异常都要转成 DataError
+"app/providers/*" = ["BLE001", "S112"]
+# 启动期迁移失败不应阻断进程启动
+"app/main.py" = ["PLW1510"]
+# 测试中未使用的解包变量是常见的断言写法
+"tests/*" = ["RUF059"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

@@ -1,3 +1,15 @@
 __pycache__/
 venv/
 *.pyc
+
+# 新架构
+backend/.venv/
+backend/data/
+backend/.pytest_cache/
+backend/**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+data/
+.env
+
+frontend/*.tsbuildinfo
