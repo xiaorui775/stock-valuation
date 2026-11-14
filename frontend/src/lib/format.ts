@@ -68,3 +68,33 @@ export function changeClass(
   if (scheme === "cn") return up ? "text-red" : "text-green";
   return up ? "text-green" : "text-red";
 }
+
+/** 估值空间的配色：低于现价为「高估」，用红色标示风险。
+ *
+ * 与涨跌配色方向相反——价格下跌是中性事实，而估值低于现价是负面信号。
+ */
+export function valuationClass(
+  value: number | null | undefined,
+  scheme: ColorScheme = "cn",
+): string {
+  if (value === null || value === undefined || Number.isNaN(value) || value === 0) {
+    return "text-muted";
+  }
+  const undervalued = value > 0;
+  if (scheme === "cn") return undervalued ? "text-green" : "text-red";
+  return undervalued ? "text-red" : "text-green";
+}
+
+/** 市场的中文标签。 */
+export function marketLabel(market: string | null | undefined): string {
+  switch (market) {
+    case "US":
+      return "美股";
+    case "HK":
+      return "港股";
+    case "CN":
+      return "A股";
+    default:
+      return "未知";
+  }
+}

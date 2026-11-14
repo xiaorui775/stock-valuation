@@ -10,8 +10,10 @@ from typing import Any, ClassVar, Optional
 
 import pandas as pd
 
+from app.core.tickers import exchange_hint, normalize_ticker
 from app.providers.base import (
     ProviderUnavailable,
+    RateLimited,
     TickerNotFound,
     detect_market,
 )
@@ -21,6 +23,7 @@ from app.providers.models import (
     Financials,
     FinancialYear,
     Instrument,
+    InstrumentKind,
     Market,
     NewsItem,
     Quote,
@@ -42,6 +45,19 @@ def _num(value: Any) -> Optional[float]:
         return None
 
 
+def _instrument_kind(quote_type: Optional[str]) -> InstrumentKind:
+    """把 yfinance 的 quoteType 映射到统一的标的类型。"""
+    if not quote_type:
+        return InstrumentKind.UNKNOWN
+    mapping = {
+        "EQUITY": InstrumentKind.EQUITY,
+        "ETF": InstrumentKind.ETF,
+        "INDEX": InstrumentKind.INDEX,
+        "MUTUALFUND": InstrumentKind.FUND,
+    }
+    return mapping.get(str(quote_type).upper(), InstrumentKind.UNKNOWN)
+
+
 def normalize_yield(raw: Optional[float]) -> Optional[float]:
     """yfinance 的 dividendYield 在不同版本里有小数和百分数两种口径，统一成百分数。"""
     if raw is None:
@@ -57,6 +73,7 @@ class YFinanceProvider:
 
     def __init__(self) -> None:
         self._yf = None
+        self._rate_limit_error = None
 
     def _module(self):
         if self._yf is None:
@@ -65,10 +82,41 @@ class YFinanceProvider:
             except Exception as exc:  # pragma: no cover - 环境问题
                 raise ProviderUnavailable(f"yfinance 不可用：{exc}") from exc
             self._yf = yf
+            # 懒导入：仅在 yfinance 可用时注册限流异常，供 _wrap 统一识别
+            try:
+                from yfinance.exceptions import YFRateLimitError
+
+                self._rate_limit_error = YFRateLimitError
+            except Exception:  # pragma: no cover - 旧版本无此异常
+                self._rate_limit_error = None
         return self._yf
+
+    def _wrap(self, action: str):
+        """把 yfinance 异常翻译成统一 Provider 异常，限流单独标注。"""
+        self._module()  # 确保 _rate_limit_error 已注册
+        rate_cls = self._rate_limit_error
+
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as exc:
+                    if rate_cls is not None and isinstance(exc, rate_cls):
+                        raise RateLimited(f"{action}：{exc}") from exc
+                    raise ProviderUnavailable(f"{action}：{exc}") from exc
+
+            return wrapper
+
+        return decorator
 
     def _ticker(self, ticker: str):
         return self._module().Ticker(ticker)
+
+    @staticmethod
+    def _require_code(ticker: str) -> None:
+        """名称（中文字符串）不是代码，直接判定为无效，避免上游请求被限流后误报。"""
+        if not (ticker or "").isascii():
+            raise TickerNotFound(ticker)
 
     # ------------------------------------------------------------------
     # 搜索
@@ -94,19 +142,24 @@ class YFinanceProvider:
                     ticker=symbol,
                     name=q.get("shortname") or q.get("longname") or symbol,
                     market=detect_market(symbol),
-                    exchange=q.get("exchange"),
+                    exchange=q.get("exchange") or exchange_hint(symbol),
                     currency=q.get("currency"),
+                    kind=_instrument_kind(q.get("quoteType")),
                     provider=self.name,
                 )
             )
         if not results:
-            upper = query.upper()
-            if upper.isalnum() and len(upper) <= 10:
+            upper = normalize_ticker(query)
+            # 仅对 ASCII 代码做精确匹配兜底；中文名称（如「英伟达」）本身不是代码，
+            # 否则会把名称当成 ticker 返回，用户点开后必然查不到行情。
+            if upper and upper.isascii() and upper.isalnum() and len(upper) <= 10:
                 results.append(
                     Instrument(
                         ticker=upper,
                         name=upper,
                         market=detect_market(upper),
+                        exchange=exchange_hint(upper),
+                        kind=InstrumentKind.EQUITY,
                         provider=self.name,
                         source_meta={"note": "按代码精确匹配"},
                     )
@@ -117,11 +170,9 @@ class YFinanceProvider:
     # 行情
     # ------------------------------------------------------------------
     def get_quote(self, ticker: str) -> Quote:
-        try:
-            t = self._ticker(ticker)
-            info = t.info or {}
-        except Exception as exc:
-            raise ProviderUnavailable(f"行情获取失败：{exc}") from exc
+        self._require_code(ticker)
+        t = self._ticker(ticker)
+        info = self._wrap("行情获取失败")(lambda: t.info or {})()
 
         price = _num(info.get("currentPrice") or info.get("regularMarketPrice"))
         if price is None:
@@ -180,10 +231,10 @@ class YFinanceProvider:
     def get_history(
         self, ticker: str, period: str = "1y", interval: str = "1d"
     ) -> list[Bar]:
-        try:
-            hist = self._ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
-        except Exception as exc:
-            raise ProviderUnavailable(f"历史价格获取失败：{exc}") from exc
+        self._require_code(ticker)
+        hist = self._wrap("历史价格获取失败")(
+            lambda: self._ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+        )()
         if hist is None or hist.empty:
             raise TickerNotFound(ticker)
         bars: list[Bar] = []
@@ -208,13 +259,11 @@ class YFinanceProvider:
     # 财务报表
     # ------------------------------------------------------------------
     def get_financials(self, ticker: str, period: str = "annual", limit: int = 5) -> Financials:
-        try:
-            t = self._ticker(ticker)
-            income = t.income_stmt
-            cashflow = t.cashflow
-            balance = t.balance_sheet
-        except Exception as exc:
-            raise ProviderUnavailable(f"财务报表获取失败：{exc}") from exc
+        self._require_code(ticker)
+        t = self._ticker(ticker)
+        income = self._wrap("财务报表获取失败")(lambda: t.income_stmt)()
+        cashflow = self._wrap("财务报表获取失败")(lambda: t.cashflow)()
+        balance = self._wrap("财务报表获取失败")(lambda: t.balance_sheet)()
         if income is None or income.empty:
             raise TickerNotFound(ticker)
 
@@ -234,6 +283,8 @@ class YFinanceProvider:
             balance, "Stockholders Equity", "Total Equity Gross Minority Interest", "Common Stock Equity"
         )
         shares_row = _row(balance, "Ordinary Shares Number", "Share Issued")
+        receivables_row = _row(balance, "Accounts Receivable", "Receivables")
+        inventory_row = _row(balance, "Inventory")
 
         def val(series, col):
             if series is None or col not in series.index:
@@ -267,6 +318,8 @@ class YFinanceProvider:
                     total_cash=val(cash_row, col),
                     total_equity=val(equity_row, col),
                     shares_outstanding=val(shares_row, col),
+                    accounts_receivable=val(receivables_row, col),
+                    inventory=val(inventory_row, col),
                 )
             )
         if not years:
@@ -283,6 +336,7 @@ class YFinanceProvider:
     # 新闻与日历
     # ------------------------------------------------------------------
     def get_news(self, ticker: str) -> list[NewsItem]:
+        self._require_code(ticker)
         try:
             raw = self._ticker(ticker).news or []
         except Exception as exc:
@@ -309,6 +363,11 @@ class YFinanceProvider:
                     published_at=_parse_time(published),
                 )
             )
+        # FR-NEWS-02：按时间倒序；缺时间的条目排最后
+        items.sort(
+            key=lambda i: i.published_at or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
         return items
 
     def get_calendar(self, ticker: str) -> CalendarInfo | None:

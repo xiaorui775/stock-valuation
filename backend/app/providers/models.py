@@ -15,6 +15,16 @@ class Market(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class InstrumentKind(str, Enum):
+    """标的类型。"""
+
+    EQUITY = "equity"
+    ETF = "etf"
+    INDEX = "index"
+    FUND = "fund"
+    UNKNOWN = "unknown"
+
+
 class Instrument(BaseModel):
     """标的元信息。"""
 
@@ -23,6 +33,7 @@ class Instrument(BaseModel):
     market: Market = Market.UNKNOWN
     exchange: str | None = None
     currency: str | None = None
+    kind: InstrumentKind = InstrumentKind.UNKNOWN
     provider: str | None = None
     source_meta: dict[str, Any] = Field(default_factory=dict)
 
@@ -94,6 +105,8 @@ class FinancialYear(BaseModel):
     total_cash: float | None = None
     total_equity: float | None = None
     shares_outstanding: float | None = None
+    accounts_receivable: float | None = None
+    inventory: float | None = None
 
 
 class Financials(BaseModel):

@@ -2,6 +2,8 @@
 
 export type Market = "US" | "HK" | "CN" | "UNKNOWN";
 
+export type InstrumentKind = "equity" | "etf" | "index" | "fund" | "unknown";
+
 export interface User {
   id: number;
   email: string;
@@ -17,7 +19,9 @@ export interface Instrument {
   market: Market;
   exchange: string | null;
   currency: string | null;
+  kind: InstrumentKind;
   provider: string | null;
+  note: string | null;
 }
 
 export interface Quote {
@@ -63,11 +67,32 @@ export interface Bar {
   volume: number | null;
 }
 
+/** 技术指标序列：每条与 bars 按下标对齐，窗口不满为 null。 */
+export interface Indicators {
+  ma5: (number | null)[];
+  ma10: (number | null)[];
+  ma20: (number | null)[];
+  ma60: (number | null)[];
+  ma120: (number | null)[];
+  boll_mid: (number | null)[];
+  boll_upper: (number | null)[];
+  boll_lower: (number | null)[];
+  dif: (number | null)[];
+  dea: (number | null)[];
+  macd: (number | null)[];
+  rsi14: (number | null)[];
+}
+
 export interface History {
   ticker: string;
   period: string;
   interval: string;
+  adjustment: string;
+  start_date: string | null;
+  end_date: string | null;
+  count: number;
   bars: Bar[];
+  indicators: Indicators;
 }
 
 export interface FinancialYear {
@@ -85,6 +110,25 @@ export interface FinancialYear {
   total_cash: number | null;
   total_equity: number | null;
   shares_outstanding: number | null;
+  yoy: Record<string, number | null>;
+}
+
+export interface CrossCheck {
+  field: string;
+  values: Record<string, number>;
+  ratio: number | null;
+  diff_pct: number;
+  conflict: boolean;
+  note: string;
+}
+
+export interface CalendarInfo {
+  ticker: string;
+  earnings_date: string | null;
+  dividend_date: string | null;
+  ex_dividend_date: string | null;
+  days_until_earnings: number | null;
+  note: string | null;
 }
 
 export interface Financials {
@@ -92,6 +136,47 @@ export interface Financials {
   currency: string | null;
   period: string;
   years: FinancialYear[];
+  cagr: Record<string, number | null>;
+  cagr_years: number;
+  missing_fields: string[];
+  cross_check?: CrossCheck | null;
+}
+
+export interface Insights {
+  ticker: string;
+  currency: string | null;
+  fiscal_year: number | null;
+  items: {
+    rule: string;
+    name: string;
+    level: "alert" | "watch" | "info";
+    title: string;
+    detail: string;
+    formula: string;
+    value: number | null;
+    period: string | null;
+  }[];
+  uncovered: { rule: string; name: string; reason: string }[];
+  summary: string;
+}
+
+export interface DataQualitySection {
+  key: string;
+  label: string;
+  source: string | null;
+  as_of: string | null;
+  cached: boolean;
+  stale: boolean;
+  missing_fields: string[];
+  note: string | null;
+}
+
+export interface DataQuality {
+  ticker: string;
+  checked_at: string;
+  sections: DataQualitySection[];
+  warnings: string[];
+  cross_check: CrossCheck | null;
 }
 
 export interface NewsItem {
@@ -106,4 +191,46 @@ export interface NewsItem {
 export interface NewsList {
   ticker: string;
   items: NewsItem[];
+}
+
+export type SessionStatus = "pre" | "regular" | "post" | "closed";
+
+export interface Session {
+  status: SessionStatus;
+  label: string;
+  timezone: string;
+  local_time: string;
+  note: string | null;
+}
+
+export interface Week52Position {
+  position: number | null;
+  from_high_pct: number | null;
+  from_low_pct: number | null;
+}
+
+export interface ValuationConclusion {
+  dcf_per_share: number | null;
+  upside_pct: number | null;
+  average_value: number | null;
+  vs_price_pct: number | null;
+  band: string | null;
+  methods_used: number;
+  note: string | null;
+}
+
+export interface Overview {
+  ticker: string;
+  name: string;
+  market: Market;
+  market_label: string;
+  currency: string | null;
+  price: number | null;
+  change: number | null;
+  change_pct: number | null;
+  session: Session | null;
+  week52: Week52Position | null;
+  conclusion: ValuationConclusion | null;
+  quote: Quote | null;
+  as_of: string | null;
 }

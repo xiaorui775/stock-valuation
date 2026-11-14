@@ -4,12 +4,13 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from app.core.config import get_settings
-from app.core.errors import AppError
+from app.core.errors import AppError, DataUnavailable
 from app.core.logging import get_logger
 from app.providers.cache import TtlCache, cache_key, l1_cache
 from app.providers.demo_provider import DemoProvider
 from app.providers.models import (
     Bar,
+    CalendarInfo,
     Financials,
     Instrument,
     NewsItem,
@@ -57,7 +58,7 @@ class MarketService:
         try:
             quote = self.registry.get_quote(ticker)
         except AppError as exc:
-            # 降级：返回过期的缓存数据
+            # 降级：返回过期的缓存数据（限流/不可用时宁可给 stale 也不报错）
             if entry is not None:
                 logger.warning("quote_stale_fallback", ticker=ticker, error=exc.message)
                 quote = entry.value
@@ -84,7 +85,9 @@ class MarketService:
             return entry.value, self._meta("cache", None, cached=True, stale=False)
 
         try:
-            bars = self.registry.get_history(ticker, period=period, interval=interval)
+            bars, source = self.registry.get_history_with_source(
+                ticker, period=period, interval=interval
+            )
         except AppError as exc:
             if entry is not None:
                 logger.warning("history_stale_fallback", ticker=ticker, error=exc.message)
@@ -92,7 +95,7 @@ class MarketService:
             raise
 
         self.cache.set(key, bars, self._ttl("history"))
-        return bars, self._meta("yfinance", None, cached=False, stale=False)
+        return bars, self._meta(source, None, cached=False, stale=False)
 
     # ------------------------------------------------------------------
     def get_financials(
@@ -131,14 +134,14 @@ class MarketService:
             return entry.value, self._meta("cache", None, cached=True, stale=False)
 
         try:
-            items = self.registry.get_news(ticker)
+            items, source = self.registry.get_news_with_source(ticker)
         except AppError:
             if entry is not None:
                 return entry.value, self._meta("cache", None, cached=True, stale=True)
             raise
 
         self.cache.set(key, items, self._ttl("news"))
-        return items, self._meta("yfinance", None, cached=False, stale=False)
+        return items, self._meta(source, None, cached=False, stale=False)
 
     # ------------------------------------------------------------------
     def search(self, query: str, market: Optional[str] = None) -> tuple[list[Instrument], dict[str, Any]]:
@@ -156,7 +159,82 @@ class MarketService:
 
         items = self.registry.search(query, market)
         self.cache.set(key, items, self._ttl("metadata"))
-        return items, self._meta("yfinance", None, cached=False, stale=False)
+        source = items[0].provider if items else None
+        return items, self._meta(source, None, cached=False, stale=False)
+
+    def get_index_members(self, key: str) -> tuple[list[Instrument], dict[str, Any]]:
+        """指数成分股（FR-SCR-01）。没有 provider 支持时明确抛错，不编造名单。"""
+        for provider in self.registry.all():
+            getter = getattr(provider, "get_index_members", None)
+            if getter is None:
+                continue
+            try:
+                members = getter(key)
+            except AppError:
+                continue
+            if members:
+                return members, self._meta(provider.name, None, cached=False, stale=False)
+        raise DataUnavailable(
+            "当前数据源不提供指数成分股，使用内置快照；接入 akshare 后可刷新（M2-15）。"
+        )
+
+    def get_calendar(self, ticker: str) -> tuple[Optional[CalendarInfo], dict[str, Any]]:
+        """财报日历；数据源没有时返回 (None, meta)，不编造日期。"""
+        ticker = ticker.strip().upper()
+        if self.demo_mode:
+            info = self._demo.get_calendar(ticker)
+            return info, self._meta(self._demo.name, None, cached=False, stale=False)
+
+        key = cache_key("calendar", ticker)
+        entry = self.cache.get(key)
+        if entry is not None and not entry.is_expired:
+            return entry.value, self._meta("cache", None, cached=True, stale=False)
+
+        try:
+            info, source = self.registry.get_calendar_with_source(ticker)
+        except AppError as exc:
+            if entry is not None:
+                logger.warning("calendar_stale_fallback", ticker=ticker, error=exc.message)
+                return entry.value, self._meta("cache", None, cached=True, stale=True)
+            raise
+        if info is None:
+            return None, self._meta(None, None, cached=False, stale=False)
+        self.cache.set(key, info, self._ttl("metadata"))
+        return info, self._meta(source, None, cached=False, stale=False)
+
+    # ------------------------------------------------------------------
+    def get_fx_rate(
+        self, base: str, quote: str
+    ) -> tuple[float | None, dict[str, Any]]:
+        """1 单位 base 折合多少 quote（FR-PORT-04）。
+
+        真实数据源用 `{base}{quote}=X` 的行情价；直接汇率取不到时尝试反向并取倒数。
+        两者都没有就返回 None，由调用方按币种分组展示，不做估算。
+        """
+        base = (base or "").strip().upper()
+        quote = (quote or "").strip().upper()
+        if not base or not quote:
+            return None, self._meta(None, None, cached=False, stale=False)
+        if base == quote:
+            return 1.0, self._meta("identity", None, cached=False, stale=False)
+        if self.demo_mode:
+            rate = self._demo.get_fx_rate(base, quote)
+            return rate, self._meta(
+                self._demo.name if rate is not None else None,
+                None,
+                cached=False,
+                stale=False,
+            )
+
+        for symbol, invert in ((f"{base}{quote}=X", False), (f"{quote}{base}=X", True)):
+            try:
+                fx_quote, meta = self.get_quote(symbol)
+            except AppError:
+                continue
+            if fx_quote.price:
+                rate = 1 / fx_quote.price if invert else fx_quote.price
+                return rate, {**meta, "symbol": symbol, "inverted": invert}
+        return None, self._meta(None, None, cached=False, stale=False)
 
     # ------------------------------------------------------------------
     def _meta(

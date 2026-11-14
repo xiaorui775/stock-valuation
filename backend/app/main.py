@@ -5,16 +5,29 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1 import auth, search, stocks, valuation
+from app.api.v1 import (
+    auth,
+    compare,
+    notes,
+    portfolios,
+    presets,
+    screener,
+    search,
+    stocks,
+    valuation,
+    watchlists,
+)
 from app.core.config import get_settings
 from app.core.errors import (
     AppError,
     app_error_handler,
     http_exception_handler,
     unhandled_exception_handler,
+    validation_exception_handler,
 )
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware
@@ -27,7 +40,8 @@ logger = get_logger("app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _run_migrations()
+    if settings.run_migrations:
+        _run_migrations()
     logger.info("startup", env=settings.env, demo=settings.demo, scheduler=settings.enable_scheduler)
     yield
     logger.info("shutdown")
@@ -77,11 +91,18 @@ app.add_middleware(
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(stocks.router, prefix="/api/v1")
 app.include_router(valuation.router, prefix="/api/v1")
+app.include_router(presets.router, prefix="/api/v1")
+app.include_router(watchlists.router, prefix="/api/v1")
+app.include_router(portfolios.router, prefix="/api/v1")
+app.include_router(compare.router, prefix="/api/v1")
+app.include_router(screener.router, prefix="/api/v1")
+app.include_router(notes.router, prefix="/api/v1")
 
 
 @app.get("/healthz", tags=["health"])

@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any
 
 from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -87,6 +88,37 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
                 "code": code.value,
                 "message": str(exc.detail),
                 "details": {},
+                "request_id": request_id,
+            }
+        },
+    )
+
+
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Pydantic 请求校验失败也走统一错误包（§7.9），不让 `detail` 形态漏出去。
+
+    `exc.errors()` 的 ctx 里可能带 ValueError 等不可序列化对象，只取 loc/msg/type。
+    """
+    request_id = getattr(request.state, "request_id", None)
+    errors = exc.errors()
+    details = [
+        {
+            "field": ".".join(str(part) for part in item.get("loc", ())),
+            "message": item.get("msg", ""),
+            "type": item.get("type", ""),
+        }
+        for item in errors
+    ]
+    message = details[0]["message"] if details else "请求参数校验失败"
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": ErrorCode.VALIDATION_ERROR.value,
+                "message": message,
+                "details": {"errors": details},
                 "request_id": request_id,
             }
         },

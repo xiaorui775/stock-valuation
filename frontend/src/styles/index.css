@@ -81,4 +81,16 @@ body {
   .note {
     @apply text-xs text-muted;
   }
+  .tab-chip {
+    @apply px-2.5 py-1 rounded border border-line bg-panel2 text-xs text-muted cursor-pointer;
+  }
+  .tab-chip:hover {
+    @apply border-accent text-text;
+  }
+  .tab-chip-on {
+    @apply bg-accent text-[#1a1405] border-accent font-semibold;
+  }
+  .tab-chip-on:hover {
+    @apply text-[#1a1405] border-accent;
+  }
 }

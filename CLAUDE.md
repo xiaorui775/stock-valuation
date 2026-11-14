@@ -25,7 +25,7 @@ Backend layering is strict and worth preserving:
 
 Frontend: `src/api/` (typed client + TanStack Query hooks), `src/features/` (one folder per page), `src/components/` (shared UI), `src/lib/` (formatting).
 
-Detailed requirements live in [docs/PRD.md](docs/PRD.md); task status in [docs/process.md](docs/process.md) — **update process.md whenever you complete a task** (status marker, phase counts, and change log).
+Detailed requirements live in `docs/PRD.md` and task status in `docs/process.md` — both are kept local only and are not committed to the repository. **Update process.md whenever you complete a task** (status marker, phase counts, and change log).
 
 ## Commands
 
@@ -55,7 +55,9 @@ There is no lint config for the frontend beyond `tsc --noEmit`; keep new TS stri
 
 `STOCKVAL_DEMO=1` makes every data endpoint return built-in sample data with no network access. This is the
 fastest way to verify changes and the default state for tests (`tests/conftest.py` sets it). Tests use a temp
-SQLite DB per test and `Base.metadata.create_all`, so they don't need Alembic.
+SQLite DB per test and `Base.metadata.create_all`, so they don't need Alembic — `STOCKVAL_RUN_MIGRATIONS=0`
+(also set in conftest) keeps the app lifespan from spawning an `alembic upgrade` subprocess on every TestClient
+startup, which otherwise dominates the suite's runtime.
 
 To verify a UI change, run both servers and check the API directly:
 
@@ -71,15 +73,26 @@ curl -s -b /tmp/ck http://127.0.0.1:8000/api/v1/stocks/AAPL/valuation
 - **Never fabricate data.** Missing fields are `null` and render as `—`. No estimates, no zero-filling, no interpolation. The only sanctioned fallbacks are *computational* (e.g. FCF = operating cash flow + capex, P/S = market cap ÷ revenue) and must be labelled with their formula.
 - **Percentages are percentage points everywhere.** `growth=10` means 10%; conversion to fractions happens inside `app/valuation/`. `wacc()` takes `tax_rate=21` for 21% — do not pass a fraction.
 - **Data lineage is mandatory.** Every response carries `meta.source`, `meta.as_of`, `meta.cached`, `meta.stale`, `meta.missing_fields`. `stale=true` means the cache had expired and the upstream failed — the service returns the stale copy rather than inventing data.
-- **Ticker normalization** (strip + uppercase) happens at the top of each `data_service`/`market_service` entry point.
-- **Chart.js is vendored** for the legacy Demo; the new frontend uses ECharts from npm. Either way, charts must render offline.
-- **DOM IDs and API field names are contracts.** `templates/index.html` ↔ `static/app.js` for the legacy Demo; `src/api/types.ts` ↔ backend Pydantic schemas for the new app.
+- **Ticker normalization** (strip + uppercase) lives in [backend/app/core/tickers.py](backend/app/core/tickers.py); service entry points call it before touching a provider.
+- **Charts come from ECharts (npm)** and must render offline; there is no CDN dependency.
+- **API field names are contracts.** `frontend/src/api/types.ts` mirrors the backend Pydantic schemas; changing one means changing the other.
 
 ## Estimation conventions
 
-`ValuationService.build()` defaults: stage-one growth 10% over 5 years, terminal growth 2.5%, dividend growth 3%. Discount rate defaults to CAPM `4% + beta × 5%` (beta missing → 1.0) and is overridable via the `discount` param. Balance-sheet debt/cash come from the latest annual statement first, falling back to quote-level totals; if either is still missing both become 0 and `inputs.balance_note` warns the user. The sensitivity table is discount rate ±1/±2 points against terminal growth 1.5/2.5/3.5%. The summary averages DCF, DDM (dividend yield > 0), and Graham (needs positive EPS *and* book value) and maps ±15% versus price to 低估/高估/合理.
+`ValuationService.build()` defaults: stage-one growth 10% over 5 years, terminal growth 2.5%, dividend growth 3%. Discount rate defaults to CAPM `r_f(currency) + beta × 5%` (r_f: USD 4.0 / CNY 2.5 / HKD 3.5, beta missing → 1.0) and is overridable via the `discount` param; `base_fcf` can also be overridden and is flagged as 用户输入 in `sources`. Balance-sheet debt/cash come from the latest annual statement first, falling back to quote-level totals; if either is still missing both become 0 and `inputs.balance_note` warns the user. The sensitivity table is discount rate ±1/±2 points against terminal growth 1.5/2.5/3.5%. The summary averages DCF, DDM (dividend yield > 0), and Graham (needs positive EPS *and* book value), lists each method with its equal weight in `summary.methods`, and maps ±15% versus price to 低估/高估/合理.
 
-## Legacy Demo
+Historical valuation percentiles (`/valuation/history`, [backend/app/valuation/history.py](backend/app/valuation/history.py)) map every trading day to the latest fiscal year whose `period_end` is on or before that day — never a later statement — and skip days whose denominator is missing. Fewer than 20 samples means no percentile at all rather than a weak one.
 
-The original Flask app still lives at the repo root (`app.py`, `data_service.py`, `valuation.py`, `templates/`, `static/`).
-It is superseded by `backend/` + `frontend/` and should be archived once M1 is done — don't extend it.
+Weighted summaries (`/valuation/summary`, [backend/app/valuation/summary.py](backend/app/valuation/summary.py)) require the user's weights to add up to 100% (±0.05) and reject unavailable methods instead of silently renormalising — the shown weights must equal the applied ones.
+
+Portfolio totals ([backend/app/analysis/portfolio.py](backend/app/analysis/portfolio.py), pure) are `quantity × price × fx_rate`, where `fx_rate` is base-currency-per-holding-currency from `MarketService.get_fx_rate()`. Missing FX is never estimated: those holdings are excluded from base-currency totals and reported by currency, and weights only cover convertible rows so they still sum to 100%. An empty portfolio sums to 0; a portfolio whose every row is unconvertible returns `null` totals with a warning. There is no industry field upstream, so distribution is by market only.
+
+Compare ([backend/app/analysis/compare.py](backend/app/analysis/compare.py)) fixes each metric's direction (higher/lower) on the server and returns `best`/`worst`, so the table never re-derives "best" per page; missing values never win or lose, and ties or a single value yield no ranking. All compared tickers are valued with the same DCF assumptions, with the CAPM discount rate still per currency.
+
+Screening ([backend/app/analysis/screener.py](backend/app/analysis/screener.py)) treats a missing value as failing any bounded condition — a stock with no P/E must not pass `P/E < 20` just because nothing contradicts it — and sorts nulls last in both directions. The pool is capped at 500 symbols with 4 fetch workers; a failed ticker is reported in `failures` instead of failing the request.
+
+Preset index constituents ([backend/app/providers/index_members.py](backend/app/providers/index_members.py)) are a dated built-in snapshot seeded into `index_constituents` with `updated_at` set to the snapshot date, not "now" — the UI must show that date and source. `POST /screener/indexes/{key}/refresh` replaces the list only when a provider actually supports `get_index_members()`; otherwise it keeps the existing list and returns `refreshed=false` with the reason, never an invented list.
+
+## Archived legacy demo
+
+The original Flask app is frozen at [archive/legacy-flask-demo/](archive/legacy-flask-demo/) and is no longer wired into anything. Don't extend it; the live app is `backend/` + `frontend/`.

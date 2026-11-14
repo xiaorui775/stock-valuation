@@ -11,6 +11,8 @@ _tmpdir = tempfile.mkdtemp(prefix="stockval-test-")
 os.environ["STOCKVAL_DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
 os.environ["STOCKVAL_SECRET_KEY"] = "test-secret-key"
 os.environ["STOCKVAL_ENABLE_SCHEDULER"] = "0"
+# 测试用 create_all 建表，不需要每个 TestClient 启动都跑一次 alembic 子进程。
+os.environ["STOCKVAL_RUN_MIGRATIONS"] = "0"
 os.environ["STOCKVAL_DEMO"] = "1"
 
 from fastapi.testclient import TestClient

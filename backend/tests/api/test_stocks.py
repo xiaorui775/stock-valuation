@@ -77,11 +77,11 @@ def test_history_rejects_bad_period_by_falling_back(initialized_client):
     assert resp.json()["data"]["period"] == "1y"
 
 
-def test_financials_returns_four_years(initialized_client):
+def test_financials_returns_five_years(initialized_client):
     resp = initialized_client.get("/api/v1/stocks/AAPL/financials")
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["data"]["years"]) == 4
+    assert len(body["data"]["years"]) == 5
     assert body["data"]["years"][0]["year"] == 2025
     assert body["data"]["years"][0]["free_cash_flow"] == 112_000_000_000
 

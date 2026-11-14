@@ -1,6 +1,8 @@
 """Provider 层测试：字段映射与市场识别。"""
 from __future__ import annotations
 
+import pytest
+
 from app.providers.base import detect_market
 from app.providers.demo_provider import DemoProvider
 from app.providers.models import Market
@@ -47,9 +49,25 @@ def test_demo_history_last_close_matches_quote():
 
 def test_demo_financials_has_fcf():
     financials = DemoProvider().get_financials("AAPL")
-    assert len(financials.years) == 4
-    assert financials.years[0].free_cash_flow == 112_000_000_000
-    assert financials.years[0].capex == -12_000_000_000
+    year = financials.years[0]
+    assert len(financials.years) == 5
+    assert year.free_cash_flow == 112_000_000_000
+    # 资本开支以负数表示，自由现金流 = 经营现金流 + 资本开支
+    assert year.capex < 0
+    assert year.operating_cash_flow + year.capex == pytest.approx(year.free_cash_flow)
+
+
+def test_demo_scale_is_plausible():
+    """演示数据的量级应与真实公司同阶，避免市值/营收出现天文数字。"""
+    demo = DemoProvider()
+    for ticker in ("AAPL", "0700.HK", "600519.SS", "000001.SZ"):
+        quote = demo.get_quote(ticker)
+        financials = demo.get_financials(ticker).years[0]
+        assert quote.market_cap == pytest.approx(quote.price * quote.shares_outstanding)
+        assert quote.shares_outstanding == financials.shares_outstanding
+        # 市值 / 营收 落在合理区间（0.5x – 60x）
+        ratio = quote.market_cap / financials.revenue
+        assert 0.5 < ratio < 60, (ticker, ratio)
 
 
 def test_demo_news_kinds():

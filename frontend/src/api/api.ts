@@ -57,8 +57,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiEnvelope
   if (!resp.ok) {
     const err = (payload as { error?: { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string } })
       ?.error;
-    if (resp.status === 401 && typeof window !== "undefined") {
-      window.location.assign("/login");
+    // 会话失效：跳登录页并带上原地址，登录后回到出发页。
+    // 排除 /auth/* 自身，避免登录页的探测请求再触发跳转循环。
+    if (
+      resp.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.startsWith("/auth/")
+    ) {
+      const current = `${window.location.pathname}${window.location.search}`;
+      const target = current && current !== "/" ? `/login?next=${encodeURIComponent(current)}` : "/login";
+      if (window.location.pathname !== target.split("?")[0]) {
+        window.location.assign(target);
+      }
     }
     throw new ApiError(
       err?.code ?? "UNKNOWN",
