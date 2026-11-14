@@ -1,0 +1,46 @@
+{
+  "_comment": "A 股字段映射 fixture（M2-17 / FR-DATA-07）。数据为 2026-11-13 实测的 akshare 东财 emweb 年报接口与新浪 hq 行情接口的真实返回样本。上游字段改名时，这里的键名就是契约，改键必须同步改 provider 映射并说明。",
+  "akshare_financials": {
+    "source": "ak.stock_profit_sheet_by_yearly_em / stock_balance_sheet_by_yearly_em / stock_cash_flow_sheet_by_yearly_em, symbol=SH600519, 最新一行 REPORT_DATE=2025-12-31",
+    "profit_columns": [
+      "TOTAL_OPERATE_INCOME",
+      "OPERATE_COST",
+      "OPERATE_PROFIT",
+      "PARENT_NETPROFIT",
+      "NETPROFIT",
+      "BASIC_EPS",
+      "DILUTED_EPS"
+    ],
+    "balance_columns": [
+      "TOTAL_LIABILITIES",
+      "MONETARYFUNDS",
+      "TOTAL_PARENT_EQUITY",
+      "TOTAL_EQUITY",
+      "SHARE_CAPITAL",
+      "ACCOUNTS_RECE",
+      "INVENTORY"
+    ],
+    "cashflow_columns": ["NETCASH_OPERATE", "CONSTRUCT_LONG_ASSET"],
+    "sample_row": {
+      "REPORT_DATE": "2025-12-31 00:00:00",
+      "TOTAL_OPERATE_INCOME": 172054171890.91,
+      "OPERATE_COST": 14892277570.91,
+      "OPERATE_PROFIT": 114808950164.24,
+      "PARENT_NETPROFIT": 82320067101.68,
+      "BASIC_EPS": 65.66,
+      "TOTAL_LIABILITIES": 49875590112.37,
+      "MONETARYFUNDS": 51690610946.5,
+      "TOTAL_PARENT_EQUITY": 244637811032.18,
+      "SHARE_CAPITAL": 1252270215.0,
+      "NETCASH_OPERATE": 61522204989.35,
+      "CONSTRUCT_LONG_ASSET": 3127594916.41
+    }
+  },
+  "sina_quote": {
+    "source": "hq.sinajs.cn/list=sh600519,sh600519_i, 2026-11-13 15:34:59",
+    "main_fields_comment": "0 名称 1 今开 2 昨收 3 现价 4 最高 5 最低 8 成交量(股) 9 成交额(元) 30 日期 31 时间",
+    "main": "贵州茅台,1404.000,1410.270,1435.260,1437.690,1394.000,1435.000,1435.260,4177984,5954834070.000,100,1435.000,100,1434.800,100,1434.680,100,1434.600,100,1434.550,175,1435.260,300,1435.270,600,1435.380,900,1435.490,900,1435.500,2026-11-13,15:34:59,00,D|1400|2009364.00",
+    "ext_fields_comment": "3 EPS-TTM 5 每股净资产 7 总股本(万股) 11 货币 24 「52周最高|52周最低」 37 营业收入TTM(元)",
+    "ext": "A,gzmt,65.6600,65.6615,51.5706,216.9496,135.7564,125008.1601,125008.1601,125008.1601,0,CNY,823.2007,821.6075,31.3900,1,24.4700,1309.7074,644.6743,1539.976,1151.01,0.1,贵州茅台,X|O|0|0|0,1551.30|1269.24,20260930|21489141993.98,671.5200|85.6040,|,,1/1,EQA,,1.99,1349.156|1392.050|1453.000|1418.399|1274.890,白酒Ⅱ,,1,174433934764.98,54313.7592,20260930|64467425981.950000|64324824599.180000|133283652508.950000|84058979832.290000|280421617022.850000|24.470000|89.581093|11.901568|7.186652|5.550459|0.378442|1215.067000,贵州国资|白酒|价值品牌,1,"
+  }
+}

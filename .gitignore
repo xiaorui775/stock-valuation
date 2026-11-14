@@ -1,3 +1,20 @@
 __pycache__/
 venv/
 *.pyc
+
+# 新架构
+backend/.venv/
+backend/data/
+backend/.pytest_cache/
+backend/**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+data/
+.env
+
+frontend/*.tsbuildinfo
+
+# 内部需求与开发过程文档：仅本地保留，不纳入版本库
+# （README 与页面截图仍需随仓库发布，不要忽略整个 docs/）
+docs/PRD.md
+docs/process.md

@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply bg-panel border border-line rounded-lg p-5 mb-4;
+  }
+  .card-title {
+    @apply text-[17px] font-semibold mb-3.5;
+  }
+  .btn {
+    @apply px-4 py-2 rounded-md border-0 cursor-pointer font-semibold text-sm;
+  }
+  .btn-primary {
+    @apply bg-accent text-[#1a1405];
+  }
+  .btn-primary:hover {
+    @apply brightness-110;
+  }
+  .btn-ghost {
+    @apply bg-panel2 text-text border border-line;
+  }
+  .btn-ghost:hover {
+    @apply border-accent;
+  }
+  .input {
+    @apply bg-panel2 border border-line rounded-md px-3 py-2 text-sm text-text outline-none;
+  }
+  .input:focus {
+    @apply border-accent;
+  }
+  .stat {
+    @apply flex justify-between py-2 px-2.5 border-b border-line text-sm;
+  }
+  .stat-k {
+    @apply text-muted;
+  }
+  .stat-v {
+    @apply font-semibold;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+  .up {
+    @apply text-green;
+  }
+  .down {
+    @apply text-red;
+  }
+  .data-table {
+    @apply w-full text-sm border-collapse;
+  }
+  .data-table th,
+  .data-table td {
+    @apply py-2 px-2.5 border-b border-line text-right whitespace-nowrap;
+  }
+  .data-table th:first-child,
+  .data-table td:first-child {
+    @apply text-left;
+  }
+  .data-table th {
+    @apply text-muted font-semibold;
+  }
+  .note {
+    @apply text-xs text-muted;
+  }
+  .tab-chip {
+    @apply px-2.5 py-1 rounded border border-line bg-panel2 text-xs text-muted cursor-pointer;
+  }
+  .tab-chip:hover {
+    @apply border-accent text-text;
+  }
+  .tab-chip-on {
+    @apply bg-accent text-[#1a1405] border-accent font-semibold;
+  }
+  .tab-chip-on:hover {
+    @apply text-[#1a1405] border-accent;
+  }
+}

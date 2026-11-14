@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      STOCKVAL_ENV: production
+      STOCKVAL_SECRET_KEY: ${STOCKVAL_SECRET_KEY:-change-me-in-production}
+      STOCKVAL_DATABASE_URL: sqlite:////data/stockval.db
+      STOCKVAL_DATA_DIR: /data
+      STOCKVAL_ENABLE_SCHEDULER: ${STOCKVAL_ENABLE_SCHEDULER:-true}
+      STOCKVAL_DEMO: ${STOCKVAL_DEMO:-0}
+      STOCKVAL_ALLOWED_ORIGINS: ${STOCKVAL_ALLOWED_ORIGINS:-http://localhost:8080}
+      STOCKVAL_LOG_LEVEL: ${STOCKVAL_LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${STOCKVAL_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  data:
